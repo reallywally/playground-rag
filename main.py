@@ -4,11 +4,15 @@ from pydantic import BaseModel
 import uvicorn
 import os
 import glob
+from dotenv import load_dotenv
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chains import RetrievalQA
+
+# 환경변수 로드
+load_dotenv()
 
 app = FastAPI()
 
@@ -70,7 +74,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         split_documents = text_splitter.split_documents(docs)
 
         # 임베딩 생성 및 벡터스토어 구축
-        embeddings = OpenAIEmbeddings()
+        embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
         vectorstore = FAISS.from_documents(
             documents=split_documents,
             embedding=embeddings
@@ -101,7 +105,8 @@ async def chat(request: ChatRequest):
         # LLM 모델 초기화
         llm = ChatOpenAI(
             model="gpt-3.5-turbo",
-            temperature=0.1
+            temperature=0.1,
+            openai_api_key=os.getenv("OPENAI_API_KEY")
         )
 
         # 검색기 생성
