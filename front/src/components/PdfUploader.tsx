@@ -21,8 +21,8 @@ const PdfUploader: React.FC = () => {
       return;
     }
     
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setError('파일 크기는 10MB를 초과할 수 없습니다.');
+    if (selectedFile.size > 20 * 1024 * 1024) {
+      setError('파일 크기는 20MB를 초과할 수 없습니다.');
       return;
     }
 
@@ -96,7 +96,7 @@ const PdfUploader: React.FC = () => {
             📄 PDF 파일 업로드
           </CardTitle>
           <CardDescription>
-            PDF 파일을 드래그하거나 클릭하여 업로드하세요 (최대 10MB)
+            PDF 파일을 드래그하거나 클릭하여 업로드하세요 (최대 20MB)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

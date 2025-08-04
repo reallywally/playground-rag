@@ -9,6 +9,24 @@ interface Message {
   text: string;
   isUser: boolean;
   timestamp: Date;
+  sources?: Array<{
+    page: string;
+    source: string;
+  }>;
+}
+
+interface ChatResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    answer: string;
+    sources: Array<{
+      page: string;
+      source: string;
+    }>;
+    query: string;
+  };
+  error?: string;
 }
 
 const ChatBot: React.FC = () => {
@@ -41,37 +59,57 @@ const ChatBot: React.FC = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const messageToSend = inputValue;
     setInputValue('');
     setIsLoading(true);
 
-    // 챗봇 응답 시뮬레이션
-    setTimeout(() => {
-      const botMessage: Message = {
+    try {
+      const response = await fetch('http://localhost:8000/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: messageToSend }),
+      });
+
+      if (!response.ok) {
+        throw new Error('서버 응답 오류');
+      }
+
+      const data: ChatResponse = await response.json();
+      console.log(data)
+      
+      if (data.success && data.data) {
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: data.data.answer,
+          isUser: false,
+          timestamp: new Date(),
+          sources: data.data.sources
+        };
+        setMessages(prev => [...prev, botMessage]);
+      } else {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: data.message || data.error || '응답을 받지 못했습니다.',
+          isUser: false,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    } catch (error) {
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: getBotResponse(inputValue),
+        text: '죄송합니다. 서버와의 연결에 문제가 발생했습니다.',
         isUser: false,
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, botMessage]);
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
-  };
-
-  const getBotResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
-    
-    if (input.includes('업로드') || input.includes('파일')) {
-      return 'PDF 파일은 왼쪽 영역을 통해 업로드할 수 있습니다. 드래그 앤 드롭하거나 클릭하여 파일을 선택하세요.';
-    } else if (input.includes('크기') || input.includes('용량')) {
-      return '업로드 가능한 파일 크기는 최대 10MB입니다.';
-    } else if (input.includes('형식') || input.includes('타입')) {
-      return 'PDF 형식의 파일만 업로드 가능합니다.';
-    } else if (input.includes('안녕') || input.includes('hello')) {
-      return '안녕하세요! 무엇을 도와드릴까요?';
-    } else {
-      return '죄송합니다. 잘 이해하지 못했습니다. PDF 업로드와 관련된 질문을 해주시면 도움을 드릴 수 있습니다.';
     }
   };
+
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -103,6 +141,16 @@ const ChatBot: React.FC = () => {
                   }`}
                 >
                   <p className="text-sm">{message.text}</p>
+                  {message.sources && message.sources.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-300">
+                      <p className="text-xs opacity-70 mb-1">참고 문서:</p>
+                      {message.sources.map((source, index) => (
+                        <p key={index} className="text-xs opacity-70">
+                          페이지 {source.page}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                   <p className="text-xs opacity-70 mt-1">
                     {message.timestamp.toLocaleTimeString([], {
                       hour: '2-digit',
