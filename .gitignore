@@ -36,3 +36,6 @@ Thumbs.db
 # 업로드 파일
 uploads/
 *.log
+
+# Vector DB
+chroma_db/

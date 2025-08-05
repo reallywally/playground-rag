@@ -1,6 +1,6 @@
 from typing import Optional
 from langchain_community.document_loaders import PyMuPDFLoader
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from schemas.models import UploadResponse
@@ -9,7 +9,7 @@ from config.settings import settings
 
 class PDFService:
     def __init__(self):
-        self.vectorstore: Optional[FAISS] = None
+        self.vectorstore: Optional[Chroma] = None
     
     async def process_pdf(self, file_path: str, filename: str, file_size: int) -> UploadResponse:
         """PDF 파일을 처리하고 벡터스토어를 생성합니다."""
@@ -27,9 +27,10 @@ class PDFService:
 
             # 임베딩 생성 및 벡터스토어 구축
             embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
-            self.vectorstore = FAISS.from_documents(
+            self.vectorstore = Chroma.from_documents(
                 documents=split_documents,
-                embedding=embeddings
+                embedding=embeddings,
+                persist_directory="./chroma_db"
             )
 
             return UploadResponse(
@@ -41,7 +42,7 @@ class PDFService:
         except Exception as e:
             raise Exception(f"Error processing PDF: {str(e)}")
     
-    def get_vectorstore(self) -> Optional[FAISS]:
+    def get_vectorstore(self) -> Optional[Chroma]:
         """현재 벡터스토어를 반환합니다."""
         return self.vectorstore
     

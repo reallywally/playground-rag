@@ -33,7 +33,7 @@ class Settings:
     SEARCH_K: int = 3  # 상위 검색 결과 개수
     
     # LLM 설정
-    MODEL_NAME: str = "gpt-3.5-turbo"
+    MODEL_NAME: str = "gpt-4.1-mini"
     TEMPERATURE: float = 0.1
 
 

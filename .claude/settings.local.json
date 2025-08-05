@@ -5,7 +5,8 @@
       "Bash(npx create-react-app:*)",
       "Bash(npm install:*)",
       "Bash(ls:*)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(python3:*)"
     ],
     "deny": []
   }
