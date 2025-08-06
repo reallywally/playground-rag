@@ -25,21 +25,27 @@ interface ChatResponse {
       source: string;
     }>;
     query: string;
+    session_id?: string;
   };
   error?: string;
 }
 
+interface ChatSession {
+  session_id: string;
+  messages: Array<{
+    role: string;
+    content: string;
+    timestamp: string;
+  }>;
+  created_at: string;
+  updated_at: string;
+}
+
 const ChatBot: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: '안녕하세요! PDF 업로드와 관련하여 궁금한 점이 있으시면 언제든 물어보세요.',
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,6 +53,48 @@ const ChatBot: React.FC = () => {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // 컴포넌트 마운트 시 새 세션 생성
+  useEffect(() => {
+    createNewSession();
+  }, []);
+
+  const createNewSession = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const session: ChatSession = await response.json();
+        setSessionId(session.session_id);
+        setMessages([{
+          id: '1',
+          text: '안녕하세요! PDF와 관련하여 궁금한 점이 있으시면 언제든 물어보세요. 대화를 이어가며 더 자세한 질문도 하실 수 있습니다.',
+          isUser: false,
+          timestamp: new Date(),
+        }]);
+      }
+    } catch (error) {
+      console.error('세션 생성 실패:', error);
+      // 세션 생성에 실패해도 기본 메시지는 표시
+      setMessages([{
+        id: '1',
+        text: '안녕하세요! PDF와 관련하여 궁금한 점이 있으시면 언제든 물어보세요.',
+        isUser: false,
+        timestamp: new Date(),
+      }]);
+    }
+  };
+
+  const startNewConversation = () => {
+    setMessages([]);
+    setSessionId(null);
+    createNewSession();
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
@@ -64,12 +112,16 @@ const ChatBot: React.FC = () => {
     setIsLoading(true);
 
     try {
+      const requestBody = sessionId 
+        ? { message: messageToSend, session_id: sessionId }
+        : { message: messageToSend };
+        
       const response = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: messageToSend }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -80,6 +132,11 @@ const ChatBot: React.FC = () => {
       console.log(data)
       
       if (data.success && data.data) {
+        // 세션 ID 업데이트 (새 세션이 생성된 경우)
+        if (data.data.session_id && !sessionId) {
+          setSessionId(data.data.session_id);
+        }
+        
         const botMessage: Message = {
           id: (Date.now() + 1).toString(),
           text: data.data.answer,
@@ -121,13 +178,38 @@ const ChatBot: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          🤖 챗봇
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            🤖 챗봇
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {sessionId && (
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                세션: {sessionId.slice(0, 8)}...
+              </span>
+            )}
+            <Button
+              onClick={startNewConversation}
+              variant="outline"
+              size="sm"
+              className="text-xs"
+            >
+              🔄 새 대화
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col p-4">
         <ScrollArea className="flex-1 mb-4" ref={scrollAreaRef}>
           <div className="space-y-4 pr-2">
+            {messages.length === 0 && !isLoading && (
+              <div className="flex justify-center items-center h-full">
+                <div className="text-center text-gray-500">
+                  <p className="text-sm">새로운 대화를 시작해보세요!</p>
+                  <p className="text-xs mt-1">PDF를 업로드한 후 질문하실 수 있습니다.</p>
+                </div>
+              </div>
+            )}
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -140,7 +222,7 @@ const ChatBot: React.FC = () => {
                       : 'bg-gray-200 text-gray-800'
                   }`}
                 >
-                  <p className="text-sm">{message.text}</p>
+                  <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                   {message.sources && message.sources.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-gray-300">
                       <p className="text-xs opacity-70 mb-1">참고 문서:</p>
