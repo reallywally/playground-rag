@@ -41,11 +41,21 @@ interface ChatSession {
   updated_at: string;
 }
 
-const ChatBot: React.FC = () => {
+interface ChatBotProps {
+  sessionId: string | null;
+  onSessionUpdate?: (sessionId: string, lastMessage: string) => void;
+  onNewSession?: () => void;
+}
+
+const ChatBot: React.FC<ChatBotProps> = ({ 
+  sessionId: propSessionId, 
+  onSessionUpdate,
+  onNewSession 
+}) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(propSessionId);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,9 +64,23 @@ const ChatBot: React.FC = () => {
     }
   }, [messages]);
 
-  // 컴포넌트 마운트 시 새 세션 생성
+  // sessionId prop 변경 감지
   useEffect(() => {
-    createNewSession();
+    if (propSessionId !== sessionId) {
+      setSessionId(propSessionId);
+      if (propSessionId) {
+        loadSession(propSessionId);
+      } else {
+        setMessages([]);
+      }
+    }
+  }, [propSessionId]);
+
+  // 컴포넌트 마운트 시 처리
+  useEffect(() => {
+    if (!propSessionId) {
+      createNewSession();
+    }
   }, []);
 
   const createNewSession = async () => {
@@ -90,10 +114,39 @@ const ChatBot: React.FC = () => {
     }
   };
 
+  const loadSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/sessions/${sessionId}`);
+      if (response.ok) {
+        const session: ChatSession = await response.json();
+        
+        // 백엔드 메시지를 UI 메시지 형식으로 변환
+        const loadedMessages: Message[] = session.messages.map((msg, index) => ({
+          id: `loaded-${index}`,
+          text: msg.content,
+          isUser: msg.role === 'user',
+          timestamp: new Date(msg.timestamp),
+        }));
+        
+        setMessages(loadedMessages);
+      } else {
+        console.error('세션 로드 실패');
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('세션 로드 오류:', error);
+      setMessages([]);
+    }
+  };
+
   const startNewConversation = () => {
     setMessages([]);
     setSessionId(null);
-    createNewSession();
+    if (onNewSession) {
+      onNewSession();
+    } else {
+      createNewSession();
+    }
   };
 
   const handleSendMessage = async () => {
@@ -145,6 +198,11 @@ const ChatBot: React.FC = () => {
           sources: data.data.sources
         };
         setMessages(prev => [...prev, botMessage]);
+        
+        // 세션 업데이트 알림
+        if (onSessionUpdate && sessionId) {
+          onSessionUpdate(sessionId, messageToSend);
+        }
       } else {
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -176,31 +234,21 @@ const ChatBot: React.FC = () => {
   };
 
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader className="pb-3">
+    <Card className="h-full flex flex-col max-h-[600px]">
+      <CardHeader className="pb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-lg">
             🤖 챗봇
           </CardTitle>
-          <div className="flex items-center gap-2">
-            {sessionId && (
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                세션: {sessionId.slice(0, 8)}...
-              </span>
-            )}
-            <Button
-              onClick={startNewConversation}
-              variant="outline"
-              size="sm"
-              className="text-xs"
-            >
-              🔄 새 대화
-            </Button>
-          </div>
+          {sessionId && (
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+              세션: {sessionId.slice(0, 8)}...
+            </span>
+          )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-4">
-        <ScrollArea className="flex-1 mb-4" ref={scrollAreaRef}>
+      <CardContent className="flex-1 flex flex-col p-4 min-h-0">
+        <ScrollArea className="flex-1 mb-4 h-[400px]" ref={scrollAreaRef}>
           <div className="space-y-4 pr-2">
             {messages.length === 0 && !isLoading && (
               <div className="flex justify-center items-center h-full">
@@ -255,18 +303,20 @@ const ChatBot: React.FC = () => {
             )}
           </div>
         </ScrollArea>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="메시지를 입력하세요..."
             onKeyPress={handleKeyPress}
             disabled={isLoading}
+            className="flex-1"
           />
           <Button 
             onClick={handleSendMessage} 
             disabled={!inputValue.trim() || isLoading}
             size="sm"
+            className="flex-shrink-0"
           >
             📤
           </Button>
