@@ -31,6 +31,11 @@ class Settings:
     
     # 검색 설정
     SEARCH_K: int = 3  # 상위 검색 결과 개수
+    HYBRID_SEARCH_WEIGHT: float = 0.7  # 유사도 검색 가중치 (1-weight는 키워드 검색)
+    
+    # 임베딩 설정
+    EMBEDDING_MODEL: str = "text-embedding-3-large"  # OpenAI 임베딩 모델
+    EMBEDDING_DIMENSIONS: int = 3072  # text-embedding-3-large 차원수
     
     # LLM 설정
     MODEL_NAME: str = "gpt-4.1-mini"

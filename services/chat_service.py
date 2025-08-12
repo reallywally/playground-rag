@@ -78,12 +78,16 @@ class ChatService:
                 openai_api_key=settings.OPENAI_API_KEY
             )
 
-            # 검색기 생성
-            vectorstore = pdf_service.get_vectorstore()
-            retriever = vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": settings.SEARCH_K}
-            )
+            # 하이브리드 검색기 사용 (유사도 + 키워드)
+            retriever = pdf_service.get_hybrid_retriever()
+            
+            # 하이브리드 검색기가 없는 경우 기본 벡터 검색기 사용
+            if retriever is None:
+                vectorstore = pdf_service.get_vectorstore()
+                retriever = vectorstore.as_retriever(
+                    search_type="similarity",
+                    search_kwargs={"k": settings.SEARCH_K}
+                )
 
             # RetrievalQA 체인 생성
             qa_chain = RetrievalQA.from_chain_type(

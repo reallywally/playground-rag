@@ -4,6 +4,8 @@ from typing import Optional, Dict
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
+from langchain.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from schemas.models import UploadResponse
 from config.settings import settings
@@ -12,7 +14,13 @@ from config.settings import settings
 class PDFService:
     def __init__(self):
         self.vectorstores: Dict[str, Chroma] = {}
-        self.embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
+        self.bm25_retrievers: Dict[str, BM25Retriever] = {}
+        self.ensemble_retrievers: Dict[str, EnsembleRetriever] = {}
+        self.embeddings = OpenAIEmbeddings(
+            model=settings.EMBEDDING_MODEL,
+            openai_api_key=settings.OPENAI_API_KEY,
+            dimensions=settings.EMBEDDING_DIMENSIONS
+        )
     
     async def process_pdf(self, file_path: str, filename: str, file_size: int) -> UploadResponse:
         """PDF 파일을 처리하고 벡터스토어를 생성합니다."""
@@ -45,11 +53,27 @@ class PDFService:
                 documents=split_documents,
                 embedding=self.embeddings,
                 persist_directory="./chroma_db",
-                collection_name=collection_name
+                collection_name=collection_name,
+                collection_metadata={"hnsw:space": "cosine", "hnsw:M": 16, "hnsw:ef_construction": 200}
+            )
+            
+            # BM25 검색기 생성 (키워드 검색용)
+            bm25_retriever = BM25Retriever.from_documents(split_documents)
+            bm25_retriever.k = settings.SEARCH_K
+            
+            # 하이브리드 검색기 생성
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[
+                    vectorstore.as_retriever(search_kwargs={"k": settings.SEARCH_K}),
+                    bm25_retriever
+                ],
+                weights=[settings.HYBRID_SEARCH_WEIGHT, 1 - settings.HYBRID_SEARCH_WEIGHT]
             )
             
             # 메모리에 저장
             self.vectorstores[collection_name] = vectorstore
+            self.bm25_retrievers[collection_name] = bm25_retriever
+            self.ensemble_retrievers[collection_name] = ensemble_retriever
 
             return UploadResponse(
                 message="PDF uploaded and processed successfully",
@@ -69,6 +93,17 @@ class PDFService:
         # filename이 없으면 첫 번째 벡터스토어 반환
         if self.vectorstores:
             return next(iter(self.vectorstores.values()))
+        return None
+    
+    def get_hybrid_retriever(self, filename: str = None) -> Optional[EnsembleRetriever]:
+        """하이브리드 검색기를 반환합니다. filename이 없으면 첫 번째 검색기를 반환합니다."""
+        if filename:
+            collection_name = self._get_collection_name(filename)
+            return self.ensemble_retrievers.get(collection_name)
+        
+        # filename이 없으면 첫 번째 하이브리드 검색기 반환
+        if self.ensemble_retrievers:
+            return next(iter(self.ensemble_retrievers.values()))
         return None
     
     def has_vectorstore(self, filename: str = None) -> bool:
@@ -97,6 +132,8 @@ class PDFService:
                                 collection_name=item
                             )
                             self.vectorstores[item] = vectorstore
+                            
+                            # 기존 커렉션을 위한 BM25 및 하이브리드 검색기는 문서가 필요하므로 사용 시 생성
                         except Exception:
                             continue
             except Exception:
