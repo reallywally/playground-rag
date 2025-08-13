@@ -6,7 +6,11 @@
       "Bash(npm install:*)",
       "Bash(ls:*)",
       "Bash(pip show:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(source:*)",
+      "Bash(venv/Scripts/python.exe -c \"from services.pdf_service import pdf_service; print(''PDF service imported successfully'')\")",
+      "Bash(venv/Scripts/python.exe:*)"
     ],
     "deny": []
   }

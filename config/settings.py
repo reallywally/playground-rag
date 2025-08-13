@@ -29,6 +29,18 @@ class Settings:
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     
+    # Semantic Chunking 설정
+    USE_SEMANTIC_CHUNKING: bool = False  # 임시로 비활성화
+    SEMANTIC_CHUNK_MIN_SIZE: int = 100  # 최소 청크 크기
+    SEMANTIC_CHUNK_MAX_SIZE: int = 1500  # 최대 청크 크기
+    SENTENCE_SIMILARITY_THRESHOLD: float = 0.7  # 문장 유사도 임계값
+    
+    # 문서 전처리 설정
+    REMOVE_HEADERS_FOOTERS: bool = True
+    EXTRACT_TABLES: bool = True
+    EXTRACT_IMAGES: bool = True
+    MIN_TEXT_LENGTH: int = 50  # 최소 텍스트 길이
+    
     # 검색 설정
     SEARCH_K: int = 3  # 상위 검색 결과 개수
     HYBRID_SEARCH_WEIGHT: float = 0.7  # 유사도 검색 가중치 (1-weight는 키워드 검색)

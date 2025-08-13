@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 from typing import Optional, Dict
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_chroma import Chroma
@@ -13,6 +14,7 @@ from config.settings import settings
 
 class PDFService:
     def __init__(self):
+        self.logger = logging.getLogger(__name__)
         self.vectorstores: Dict[str, Chroma] = {}
         self.bm25_retrievers: Dict[str, BM25Retriever] = {}
         self.ensemble_retrievers: Dict[str, EnsembleRetriever] = {}
@@ -37,16 +39,40 @@ class PDFService:
                     chunks=0
                 )
             
-            # PDF 문서 로드 및 분할
-            loader = PyMuPDFLoader(file_path)
-            docs = loader.load()
-
-            # 텍스트 분할
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=settings.CHUNK_SIZE,
-                chunk_overlap=settings.CHUNK_OVERLAP
-            )
-            split_documents = text_splitter.split_documents(docs)
+            # 향상된 문서 처리기 사용
+            if settings.USE_SEMANTIC_CHUNKING:
+                try:
+                    from services.document_processor import enhanced_processor
+                    split_documents = enhanced_processor.process_pdf_enhanced(file_path, filename)
+                except ImportError as ie:
+                    self.logger.error(f"Document processor import failed: {ie}")
+                    # Fallback to basic processing
+                    loader = PyMuPDFLoader(file_path)
+                    docs = loader.load()
+                    text_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=settings.CHUNK_SIZE,
+                        chunk_overlap=settings.CHUNK_OVERLAP
+                    )
+                    split_documents = text_splitter.split_documents(docs)
+                except Exception as e:
+                    self.logger.error(f"Enhanced processing failed: {e}, falling back to basic")
+                    # Fallback to basic processing
+                    loader = PyMuPDFLoader(file_path)
+                    docs = loader.load()
+                    text_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=settings.CHUNK_SIZE,
+                        chunk_overlap=settings.CHUNK_OVERLAP
+                    )
+                    split_documents = text_splitter.split_documents(docs)
+            else:
+                # 기존 방식 사용
+                loader = PyMuPDFLoader(file_path)
+                docs = loader.load()
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=settings.CHUNK_SIZE,
+                    chunk_overlap=settings.CHUNK_OVERLAP
+                )
+                split_documents = text_splitter.split_documents(docs)
 
             # 벡터스토어 구축 (파일명별 컬렉션)
             vectorstore = Chroma.from_documents(
@@ -82,6 +108,20 @@ class PDFService:
                 chunks=len(split_documents)
             )
         except Exception as e:
+            self.logger.error(f"PDF 처리 실패 - 파일: {filename}, 경로: {file_path}")
+            self.logger.error(f"에러 상세: {str(e)}")
+            import traceback
+            self.logger.error(f"스택 트레이스: {traceback.format_exc()}")
+            
+            # 실패한 컬렉션이 생성되었다면 제거
+            collection_name = self._get_collection_name(filename)
+            if collection_name in self.vectorstores:
+                del self.vectorstores[collection_name]
+            if collection_name in self.bm25_retrievers:
+                del self.bm25_retrievers[collection_name]
+            if collection_name in self.ensemble_retrievers:
+                del self.ensemble_retrievers[collection_name]
+            
             raise Exception(f"Error processing PDF: {str(e)}")
     
     def get_vectorstore(self, filename: str = None) -> Optional[Chroma]:

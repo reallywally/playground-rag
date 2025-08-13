@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
+import logging
+import traceback
 
 from config.settings import settings
 from schemas.models import ChatRequest, ChatResponse, ChatSession
@@ -9,6 +11,10 @@ from services.pdf_service import pdf_service
 from services.chat_service import chat_service
 
 app = FastAPI()
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # CORS 설정
@@ -49,7 +55,18 @@ async def upload_pdf(file: UploadFile = File(...)):
         result = await pdf_service.process_pdf(file_path, file.filename, len(contents))
         return result.dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"PDF 업로드 실패 - 파일: {file.filename}, 크기: {len(contents)} bytes")
+        logger.error(f"에러 위치: {traceback.format_exc()}")
+        
+        # 업로드된 파일 정리
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                logger.info(f"실패한 파일 삭제: {file_path}")
+            except Exception as cleanup_error:
+                logger.error(f"파일 삭제 실패: {cleanup_error}")
+        
+        raise HTTPException(status_code=500, detail=f"PDF 처리 중 오류가 발생했습니다: {str(e)}")
 
 
 @app.post("/chat", response_model=ChatResponse)
